@@ -596,6 +596,26 @@ fn test_webhook_http_is_rejected() {
 }
 
 #[test]
+fn test_create_invoice_rejects_transfer_fee_above_100_percent() {
+    use crate::InvoiceError;
+    use soroban_sdk::Error;
+    let h = setup();
+
+    let mut m = h.make_invoice("INV-FEE-MAX");
+    m.transfer_fee_bps = 10_000;
+    h.token.create_invoice(&m);
+
+    let mut bad = h.make_invoice("INV-FEE-BAD");
+    bad.transfer_fee_bps = 10_001;
+    let res = h.token.try_create_invoice(&bad);
+    assert_eq!(
+        res.unwrap_err().unwrap(),
+        Error::from(InvoiceError::InvalidMetadata)
+    );
+    assert!(h.token.try_get_meta(&bad.invoice_id).is_err());
+}
+
+#[test]
 fn test_webhook_non_url_is_rejected() {
     let h = setup();
     let mut m = h.make_invoice("INV-WEBHOOK-4");

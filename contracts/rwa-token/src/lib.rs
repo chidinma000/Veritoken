@@ -1023,7 +1023,7 @@ impl RwaToken {
 
     /// Configures the M-of-N guardian recovery system. Admin-only.
     ///
-    /// Requires 2 ≤ threshold ≤ members.len() ≤ 10.
+    /// Requires 2 ≤ threshold ≤ members.len() ≤ 10 and no duplicate members.
     /// Clears any active recovery proposal to prevent stale proposals from
     /// executing under a new configuration.
     pub fn configure_recovery(env: Env, threshold: u32, members: Vec<Address>, cooldown: u32) {
@@ -1033,6 +1033,13 @@ impl RwaToken {
         let n = members.len();
         if threshold < 2 || threshold > n || n > 10 {
             panic_with_error!(env, RwaError::InvalidRecoveryConfig);
+        }
+        // Duplicate guardians would inflate N and let one key count twice.
+        for i in 0..n {
+            let m = members.get_unchecked(i);
+            if members.first_index_of(&m) != Some(i) {
+                panic_with_error!(env, RwaError::InvalidRecoveryConfig);
+            }
         }
 
         let last_executed_ledger: u64 = env

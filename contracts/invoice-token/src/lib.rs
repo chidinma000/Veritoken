@@ -1290,6 +1290,10 @@ impl InvoiceToken {
         if !th::is_valid_ipfs_hash(&meta.ipfs_doc_hash) {
             panic_with_error!(env, InvoiceError::InvalidMetadata);
         }
+        // Fee is amount * bps / 10_000; above 100% the net transfer goes negative.
+        if meta.transfer_fee_bps > 10_000 {
+            panic_with_error!(env, InvoiceError::InvalidMetadata);
+        }
     }
 
     fn do_create_invoice(env: &Env, meta: InvoiceMeta) {

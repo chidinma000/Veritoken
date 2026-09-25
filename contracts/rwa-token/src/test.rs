@@ -558,6 +558,31 @@ fn test_invalid_asset_type() {
 }
 
 #[test]
+#[should_panic(expected = "Error(Contract, #8)")]
+fn test_constructor_rejects_negative_max_supply() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let kyc_id = env.register(KycRegistry, ());
+    let compliance_id = env.register(ComplianceEngine, ());
+
+    // max_supply = 0 means "unlimited"; any negative cap is malformed.
+    let _ = env.register(
+        RwaToken,
+        (
+            admin,
+            7u32,
+            String::from_str(&env, "Bad Cap"),
+            String::from_str(&env, "BAD"),
+            String::from_str(&env, "invoice"),
+            kyc_id,
+            compliance_id,
+            Option::<ComplianceMetadata>::None,
+            -1i128,
+        ),
+    );
+}
+
+#[test]
 fn test_read_admin_on_uninitialized_contract_fails_with_typed_error() {
     use crate::storage_types::DataKey;
     use crate::RwaError;
@@ -2269,6 +2294,37 @@ fn test_recovery_configure_rejects_more_than_ten_members() {
         res.unwrap_err().unwrap(),
         Error::from(RwaError::InvalidRecoveryConfig)
     );
+}
+
+#[test]
+fn test_recovery_configure_rejects_zero_threshold() {
+    use crate::RwaError;
+    use soroban_sdk::Error;
+    let h = setup();
+    let members = make_guardians(&h, 3);
+    let res = h.token.try_configure_recovery(&0, &members, &100);
+    assert_eq!(
+        res.unwrap_err().unwrap(),
+        Error::from(RwaError::InvalidRecoveryConfig)
+    );
+    assert!(h.token.try_recovery_config().is_err());
+}
+
+#[test]
+fn test_recovery_configure_rejects_duplicate_members() {
+    use crate::RwaError;
+    use soroban_sdk::Error;
+    let h = setup();
+    let g = Address::generate(&h.env);
+    let other = Address::generate(&h.env);
+    // Without the guard, [g, g, other] with threshold 2 lets `g` alone meet quorum.
+    let members = soroban_sdk::vec![&h.env, g.clone(), g, other];
+    let res = h.token.try_configure_recovery(&2, &members, &100);
+    assert_eq!(
+        res.unwrap_err().unwrap(),
+        Error::from(RwaError::InvalidRecoveryConfig)
+    );
+    assert!(h.token.try_recovery_members().is_err());
 }
 
 #[test]
