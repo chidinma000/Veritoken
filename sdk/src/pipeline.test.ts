@@ -368,6 +368,28 @@ describe("TxPipeline.write — failing-call identification (#642)", () => {
     expect(err.message).toContain("mint");
   });
 
+  it("surfaces a submission-stage transport failure with its method, contract, stage, and cause (#977)", async () => {
+    const srv = makeSrv();
+    const cause = new Error("upstream rejected payload");
+    srv.sendTransaction = vi.fn().mockRejectedValue(cause);
+
+    const err = await makePipeline(srv)
+      .write(CONTRACT_ID, "burn", [encodeAddress(ALICE), encodeI128(5n)], ALICE, sign)
+      .then(() => { throw new Error("expected write to reject"); }, (e) => e);
+
+    // Not swallowed or retried as a success: the send was attempted exactly once
+    // and nothing after it (confirmation polling) ran.
+    expect(srv.sendTransaction).toHaveBeenCalledOnce();
+    expect(srv.getTransaction).not.toHaveBeenCalled();
+
+    // The failed stage and call are identifiable, and the original error is kept.
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe(
+      `Contract call burn on ${CONTRACT_ID} failed during submission: upstream rejected payload`,
+    );
+    expect((err as { cause?: unknown }).cause).toBe(cause);
+  });
+
   it("leaves typed TxError subclasses unwrapped", () => {
     const original = new SimulationError("foo", "bad");
     expect(wrapCallError(original, "foo", CONTRACT_ID, "simulation")).toBe(original);

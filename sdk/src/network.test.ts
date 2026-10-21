@@ -103,6 +103,48 @@ describe("resolveNetworkConfig", () => {
     expect(config.rpcUrl).toBe("https://from-override.example.com");
   });
 
+  it("applies explicit > environment > default precedence for every field (#975)", () => {
+    // Conflicting values in every environment layer.
+    process.env.VERITOKEN_NETWORK = "futurenet";
+    process.env.STELLAR_NETWORK = "standalone";
+    process.env.VERITOKEN_RPC_URL = "https://rpc.from-env.example.com";
+    process.env.SOROBAN_RPC_URL = "https://rpc.from-lower-priority-env.example.com";
+    process.env.VERITOKEN_NETWORK_PASSPHRASE = "Env Passphrase ; 2026";
+    process.env.VERITOKEN_RPC_ALLOW_HTTP = "true";
+
+    // Explicit options beat every environment variable.
+    expect(
+      resolveNetworkConfig({
+        network: "mainnet",
+        rpcUrl: "https://rpc.explicit.example.com",
+        networkPassphrase: "Explicit Passphrase ; 2026",
+        allowHttp: false,
+      }),
+    ).toEqual({
+      network: "mainnet",
+      rpcUrl: "https://rpc.explicit.example.com",
+      networkPassphrase: "Explicit Passphrase ; 2026",
+      allowHttp: false,
+    });
+
+    // With no explicit options, the highest-priority environment variable wins over defaults.
+    expect(resolveNetworkConfig()).toEqual({
+      network: "futurenet",
+      rpcUrl: "https://rpc.from-env.example.com",
+      networkPassphrase: "Env Passphrase ; 2026",
+      allowHttp: true,
+    });
+
+    // Fields that are neither explicit nor in the environment fall back to built-in defaults.
+    clearEnv();
+    expect(resolveNetworkConfig({ network: "mainnet" })).toEqual({
+      network: "mainnet",
+      rpcUrl: RPC_URLS.mainnet,
+      networkPassphrase: NETWORK_PASSPHRASES.mainnet,
+      allowHttp: false,
+    });
+  });
+
   it("reads allowHttp from an environment variable", () => {
     process.env.VERITOKEN_RPC_ALLOW_HTTP = "true";
     const config = resolveNetworkConfig({ network: "testnet" });
